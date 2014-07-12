@@ -15,11 +15,9 @@ tld_data={
          'purchasable_string':'We do not have an entry in our database matching your query.',
          'notes':'Had this one time out on me. Not sure what the hammer rules are, though.'},
    'sh':{'whois_works':True,
-         'hammer_delay_ms':None,
          'purchasable_string':'available'},
    'is':{'whois_host':'whois.isnic.is',
          'whois_works':False,
-         'hammer_delay_ms':None,
          'purchasable_string':'No entries found',
          'notes':
              """
@@ -30,8 +28,35 @@ tld_data={
     'am':{
         'purchasable_string':'No match',
         'whois_works':True
+    },
+    'ac':{
+        'whois_works':True,
+        'purchasable_string':'available for purchase',
+    },
+    'ee':{
+        'whois_works':True,
+        'purchasable_string':'no entries found',
+    },
+    'il':{
+        'whois_works':True,
+        'blocked_string':'DENIED',
+        'hammer_delay_ms':1000,
+        'purchasable_string':'No data was found',
+        'notes':'hammer detection triggers with access to whois service at whois.isoc.org.il was **DENIED**'
+    },
+    'in':{
+        'whois_works':True,
+        'blocked_string':'WHOIS QUERY RATE LIMIT EXCEEDED.  PLEASE WAIT AND TRY AGAIN.',
+        'purchasable_string':'NOT FOUND',
+    },    
+    'ga':{
+        'whois_works':False,
+        'notes':'WHOIS server not found.',
     }
 }
+
+class BlockedException(Exception):
+    pass
 
 def find_words_with_suffix(suffix='sh'):
     with open('/usr/share/dict/words') as wordlist:
@@ -59,11 +84,15 @@ def run_whois_on_domains(words, tld='sh'):
         whois_results[domain]=whois_result            
     return whois_results
 
-def list_purchasable_tlds(tlds):
+def list_purchasable_dnhacks(tlds):
     purchasable=[]
     for tld in tlds:
-        words = find_words_with_suffix(tld)
-        purchasable.append(list_purchasable_tld(words, tld))
+        try:
+            words = find_words_with_suffix(tld)
+            purchasable.append(list_purchasable_tld(words, tld))
+        except BlockedException:
+            print "blocked by " + tld
+            continue
     return purchasable
 
 def list_purchasable_tld(words, tld):
@@ -86,9 +115,11 @@ def is_purchasable(domain, tld):
         except:
             print "failed on " + domain
             return None
+        if tld_data.has_key('blocked_string') and tld_data[tld]['blocked_string'] in whois_result['raw'][0]:
+            raise BlockedException
         return tld_data[tld]['purchasable_string'] in whois_result['raw'][0]
 
-    else:            
+    else:
         if tld == 'sh':
             return 'available' in whois_result['raw'][0]
         
