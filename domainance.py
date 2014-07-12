@@ -10,7 +10,10 @@ import socket
 import time
 
 tld_data={
-   'ch':{'hammer_delay_ms':1000,'purchasable_string':None},
+   'ch':{'whois_works':True,
+         'hammer_delay_ms':1000,
+         'purchasable_string':'We do not have an entry in our database matching your query.',
+         'notes':'Had this one time out on me. Not sure what the hammer rules are, though.'},
    'sh':{'whois_works':True,
          'hammer_delay_ms':None,
          'purchasable_string':'available'},
@@ -24,12 +27,16 @@ tld_data={
              captcha. Results say to use port 4343 for domain existence.
              """
         },
+    'am':{
+        'purchasable_string':'No match',
+        'whois_works':True
+    }
 }
 
-with open('/usr/share/dict/words') as wordlist:
-    words=wordlist.readlines()
-
 def find_words_with_suffix(suffix='sh'):
+    with open('/usr/share/dict/words') as wordlist:
+        words=wordlist.readlines()
+
     res=[]
     # words in the list end with the newline character \n
     suffix=suffix + '\n'
@@ -38,14 +45,6 @@ def find_words_with_suffix(suffix='sh'):
             #let's get rid of the newlines now
             res.append(word.strip('\n'))
     return res
-
-def run_whois_on_tlds(tlds):
-    purchaseable={}
-    for tld in tlds:
-        
-        words=find_words_with_suffix(tld)
-        whois_results=run_whois_on_domains(words, tld)
-        purchaseable[tld]=list_purchasable(whois_results, tld)
 
 def run_whois_on_domains(words, tld='sh'):
     whois_results={}
@@ -60,39 +59,46 @@ def run_whois_on_domains(words, tld='sh'):
         whois_results[domain]=whois_result            
     return whois_results
 
+def list_purchasable_tlds(tlds):
+    purchasable=[]
+    for tld in tlds:
+        words = find_words_with_suffix(tld)
+        purchasable.append(list_purchasable_tld(words, tld))
+    return purchasable
+
 def list_purchasable_tld(words, tld):
     purchasable=[]
     for word in words:
         domain=word[:-len(tld)]+'.'+tld
         if is_purchasable(domain, tld):
+            print domain + ' is available'
             purchasable.append(domain)
+        else:
+            print domain + ' is not available'                        
     return purchasable
 
 def is_purchasable(domain, tld):
     if tld_data[tld]['whois_works']:
+        if tld_data[tld].has_key('hammer_delay_ms'):
+            time.sleep(tld_data[tld]['hammer_delay_ms']/1000.0)
         try:
             whois_result=pythonwhois.get_whois(domain)
         except:
             print "failed on " + domain
             return None
-        if tld_data[tld]['purchasable_string'] in whois_result['raw'][0]:
-            return True
+        return tld_data[tld]['purchasable_string'] in whois_result['raw'][0]
+
+    else:            
+        if tld == 'sh':
+            return 'available' in whois_result['raw'][0]
         
-    if tld == 'sh':
-        if not whois_result.has_key('status'):
-            if 'available' in whois_result['raw'][0]:
-                return True
-        else:
-            return False
-    
-    if tld == 'is':
-        s = socket.socket()
-        s.connect((tld_data[tld]['whois_host'],4343))
-        s.sendall(domain+'\r\n')
-        data = recv_timeout(s)
-        s.close()
-        if tld_data[tld]['purchasable_string'] in data:
-            return True
+        if tld == 'is':
+            s = socket.socket()
+            s.connect((tld_data[tld]['whois_host'],4343))
+            s.sendall(domain+'\r\n')
+            data = recv_timeout(s)
+            s.close()
+            return tld_data[tld]['purchasable_string'] in data
     
 def print_status_of_domains(whois_results):
     for k, v in whois_results.items():
@@ -147,4 +153,3 @@ def recv_timeout(the_socket,timeout=2):
      
     #join all parts to make final string
     return ''.join(total_data)
-    
